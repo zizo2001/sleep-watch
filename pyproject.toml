@@ -1,0 +1,20 @@
+[project]
+name = "sleepwatch"
+version = "2.7.0"
+requires-python = ">=3.11"
+dependencies = ["opencv-python", "numpy", "flask>=3.1"]
+
+[project.optional-dependencies]
+audio = ["onnxruntime", "sounddevice"]
+pose = ["mediapipe"]
+dev = ["pytest"]
+
+[project.scripts]
+sleep-watch = "sleepwatch.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["sleepwatch"]

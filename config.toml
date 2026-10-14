@@ -1,0 +1,4 @@
+# sleep-watch user tunables. Any Config field can be overridden here.
+[sleepwatch]
+camera_index = 0
+k = 6.0

@@ -1,0 +1,61 @@
+# sleep-watch configuration. Copy to config.toml and uncomment what you change.
+# Every field of sleepwatch.config.Config can be set here; unknown keys are
+# ignored. Values shown are the defaults.
+
+[sleepwatch]
+
+# --- camera ------------------------------------------------------------------
+# camera_index = 0          # OpenCV device index; `sleep-watch test --camera N` to try others
+# width = 1280
+# height = 720
+# fps = 15
+
+# --- motion detection --------------------------------------------------------
+# target_width = 320        # frames are downscaled to this width before diffing
+# alpha = 0.35              # background decay; higher = faster forget
+# blur_ksize = 7
+# diff_threshold = 12       # per-pixel change that counts as motion (0-255)
+# lighting_frac = 0.60      # >60 % of pixels changed = lamp toggled, not movement
+# window_seconds = 300.0    # rolling window for the adaptive threshold
+# warmup_seconds = 30.0     # calibration before the first event can fire
+# k = 6.0                   # threshold stiffness: median + k * MAD; lower = more sensitive
+# min_threshold = 0.004
+# trigger_seconds = 0.5     # above threshold this long opens an event
+# cooldown_seconds = 3.0    # below threshold this long closes it
+
+# --- clips -------------------------------------------------------------------
+# preroll_seconds = 10.0    # stillness kept before each movement (RAM ring buffer)
+# postroll_seconds = 10.0   # stillness kept after; closer movements merge into one file
+# retention_days = 7        # clips and exports older than this are deleted nightly
+# min_free_gb = 10.0        # stop writing clips below this much free disk
+
+# --- speech (optional; needs onnxruntime + sounddevice + models/silero_vad.onnx)
+# speech_enabled = true
+# vad_threshold = 0.5       # Silero speech probability that opens a speech event
+# speech_trigger_s = 0.3
+# speech_cooldown_s = 2.0
+# speech_min_s = 0.5        # shorter voiced bursts get no event row
+# audio_device = ""         # substring of the input device name; "" = camera mic, then default
+
+# --- morning film ------------------------------------------------------------
+# timelapse_every_s = 2.5   # one frame per 2.5 s at 24 fps: 1 film-second = 1 real minute
+
+# --- sleep / wake logic ------------------------------------------------------
+# sleep_onset_minutes = 10.0        # this much stillness = asleep (backdated to its start)
+# auto_stop_absence_minutes = 45.0  # out of bed this long after a departure = awake
+# wake_burst_stirs = 5              # distinct stirs inside the window...
+# wake_window_minutes = 10.0        # ...mean awake
+# wake_stir_gap_s = 60.0            # movements this close are one stir
+# wake_stir_span_s = 180.0          # one stir this long = sustained activity
+# wake_evidence_min_s = 10.0        # a burst needs one move this long, or full-body, or light
+# wake_demote_minutes = 20.0        # re-sleep this soon after a burst wake = it was restless
+
+# --- ambient (sun on the wall) attribution -----------------------------------
+# ambient_overlap_frac = 0.2
+# ambient_pose_min_frac = 0.5
+# person_box_pad = 0.15
+# coverage_partial_frac = 0.25
+# coverage_full_frac = 0.6
+
+# --- storage -----------------------------------------------------------------
+# data_dir = "data"         # everything the tool writes lives here. Keep it gitignored.

@@ -1,0 +1,33 @@
+# Runtime data. Contains footage of your bedroom, night reports and the event
+# database. Never commit any of it, from any directory.
+data/
+models/
+clips/
+exports/
+reports/
+timelapse/
+*.db
+*.db-wal
+*.db-shm
+*.mp4
+*.wav
+*.onnx
+*.task
+
+# Local overrides
+config.local.toml
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

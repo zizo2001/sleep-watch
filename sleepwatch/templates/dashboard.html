@@ -1,0 +1,1509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sleep-watch</title>
+<style>
+:root {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #211f1e;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.14);
+  --movement: #e66767;
+  --movement-soft: rgba(230, 103, 103, 0.16);
+  --quiet: #1baf7a;
+  --calib: #eda100;
+  --violet: #8055f0;
+  --teal: #0fa593;
+  --border: rgba(255, 255, 255, 0.08);
+  --refract: rgba(255, 255, 255, 0.05);
+  --shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.55);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --surface-2: #f3f2ef;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --accent: #2a78d6;
+    --accent-soft: rgba(42, 120, 214, 0.10);
+    --movement: #e34948;
+    --movement-soft: rgba(227, 73, 72, 0.10);
+    --quiet: #008300;
+    --calib: #c98500;
+    --violet: #6d28d9;
+    --teal: #0d9488;
+    --border: rgba(11, 11, 11, 0.09);
+    --refract: rgba(255, 255, 255, 0.6);
+    --shadow: 0 24px 48px -28px rgba(11, 11, 11, 0.18);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  min-height: 100dvh;
+  padding: clamp(16px, 3vw, 40px);
+}
+.wrap { max-width: 1240px; margin: 0 auto; }
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 4px 2px 22px;
+}
+header h1 {
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+header .tag {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--quiet);
+  display: inline-block;
+  margin-right: 7px;
+  animation: breathe 2.6s ease-in-out infinite;
+}
+.dot.movement { background: var(--movement); animation-duration: 0.9s; }
+.dot.calibrating { background: var(--calib); }
+.dot.offline { background: var(--muted); animation: none; }
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.72); opacity: 0.55; }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow), inset 0 1px 0 var(--refract);
+  overflow: hidden;
+}
+
+/* live view */
+.live { position: relative; }
+.live img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background:
+    repeating-linear-gradient(45deg, var(--surface-2) 0 14px, var(--surface) 14px 28px);
+}
+.live .chip {
+  position: absolute;
+  top: 14px; left: 14px;
+  display: flex;
+  align-items: center;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--page) 72%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--refract);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.live.movement::after {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: 20px;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--movement);
+  animation: ringpulse 0.9s ease-in-out infinite;
+}
+@keyframes ringpulse {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.25; }
+}
+.scorebar {
+  height: 4px;
+  background: var(--surface-2);
+  position: relative;
+  overflow: hidden;
+}
+.scorebar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.3s ease;
+}
+.scorebar.movement i { background: var(--movement); }
+
+/* control column */
+.stack { display: grid; gap: 18px; }
+.control { padding: 18px; display: grid; gap: 14px; }
+button.night {
+  appearance: none;
+  cursor: pointer;
+  width: 100%;
+  min-height: 56px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: #ffffff;
+  font: 600 1rem/1 system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 0.2s ease, background 0.25s ease;
+}
+button.night:hover { filter: brightness(1.08); }
+button.night:active { transform: scale(0.98); }
+button.night:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
+button.night.stop { background: var(--movement); }
+button.night:disabled { opacity: 0.45; cursor: default; }
+button.night svg { width: 18px; height: 18px; }
+.hint { color: var(--muted); font-size: 0.8rem; text-align: center; margin: 0; }
+.padwrap { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.padlabel { color: var(--muted); font-size: 0.8rem; }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.seg button {
+  appearance: none; cursor: pointer; border: 0; background: none;
+  color: var(--ink-2); font: 600 0.85rem/1 system-ui, sans-serif;
+  padding: 12px 16px; min-height: 44px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.nums {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-top: 1px solid var(--grid);
+}
+.nums > div { padding: 14px 18px; }
+.nums > div + div { border-left: 1px solid var(--grid); }
+.nums b {
+  display: block;
+  font-size: 1.45rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  transition: color 0.3s ease;
+}
+.nums span { color: var(--muted); font-size: 0.78rem; }
+.nums .hot b { color: var(--movement); }
+#thrval { color: var(--violet); }
+#t-elapsed { color: var(--accent); }
+#t-phase { color: var(--teal); }
+#t-onset { color: var(--calib); }
+#t-moves { color: var(--movement); }
+
+.spark { padding: 6px 10px 10px; border-top: 1px solid var(--grid); }
+.spark canvas { display: block; width: 100%; height: 74px; }
+.spark p { margin: 2px 8px 0; color: var(--muted); font-size: 0.74rem; }
+
+/* nights */
+.nights { margin-top: 26px; }
+.nights h2 {
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0 2px 10px;
+  color: var(--ink-2);
+}
+.nightrows { border-top: 1px solid var(--grid); }
+.nightrow {
+  display: grid;
+  grid-template-columns: 130px repeat(4, 1fr) 96px;
+  gap: 10px;
+  align-items: center;
+  padding: 13px 8px;
+  border-bottom: 1px solid var(--grid);
+  transition: background 0.2s ease;
+}
+.nightrow:hover { background: var(--accent-soft); }
+.nightrow .d { font-weight: 600; }
+.nightrow .m {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+}
+.nightrow .m em {
+  display: block;
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-family: system-ui, sans-serif;
+}
+.nightrow a {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+  cursor: pointer;
+  justify-self: end;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.nightrow a:hover { background: var(--accent-soft); }
+.nightrow a:active { transform: scale(0.97); }
+.nightrow .open-badge {
+  color: var(--quiet);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+@media (max-width: 900px) {
+  .nightrow { grid-template-columns: 1fr 1fr; }
+  .nightrow a { justify-self: start; }
+}
+.empty {
+  padding: 42px 20px;
+  text-align: center;
+  color: var(--muted);
+  border-bottom: 1px solid var(--grid);
+}
+.empty svg { width: 34px; height: 34px; margin-bottom: 8px; opacity: 0.6; }
+.empty b { display: block; color: var(--ink-2); font-weight: 600; margin-bottom: 3px; }
+.skel {
+  height: 46px;
+  border-bottom: 1px solid var(--grid);
+  background: linear-gradient(90deg, transparent, var(--refract), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.tonight[hidden] { display: none; }
+.tonight {
+  margin-top: 18px;
+  padding: 16px 20px;
+  display: flex;
+  gap: 26px;
+  align-items: center;
+  flex-wrap: wrap;
+  border-left: 3px solid var(--accent);
+}
+.tonight .t {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.tonight .t b { display: block; font-size: 1.25rem; font-weight: 650; }
+.tonight .t span { color: var(--muted); font-size: 0.76rem;
+  font-family: system-ui, sans-serif; }
+.eventbox {
+  border-bottom: 1px solid var(--grid);
+  background: var(--surface);
+  padding: 10px 14px;
+  display: grid;
+  gap: 10px;
+}
+.eventrow {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+.eventrow .when { font-weight: 600; min-width: 52px; }
+.eventrow .meta {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+}
+.eventrow video {
+  width: min(300px, 100%);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.kindchip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.kindchip.settling { background: rgba(237, 161, 0, 0.14); color: var(--calib); }
+.kindchip.speech { background: color-mix(in srgb, var(--violet) 14%, transparent);
+  color: var(--violet); }
+.kindchip.wake { background: color-mix(in srgb, var(--teal) 14%, transparent);
+  color: var(--teal); }
+.kindchip.ambient, .kindchip.awake { background: var(--surface-2);
+  color: var(--muted); }
+.kindchip.gap, .kindchip.lighting { background: var(--surface-2); color: var(--muted); }
+.kindchip.restless { background: rgba(237, 161, 0, 0.14); color: var(--calib); }
+.magchip {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.magchip.full { background: color-mix(in srgb, var(--movement) 14%, transparent);
+  color: var(--movement); }
+.magchip.partial { background: color-mix(in srgb, var(--teal) 14%, transparent);
+  color: var(--teal); }
+.magchip.twitch { background: var(--surface-2); color: var(--muted); }
+.filmwrap[hidden] { display: none; }
+.filmstrip {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 72px;
+  padding: 6px 2px 0;
+  cursor: pointer;
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+.filmstrip[hidden] { display: none; }
+.filmaxis {
+  position: relative;
+  height: 16px;
+  margin-bottom: 2px;
+}
+.filmaxis span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  top: 2px;
+}
+.filmlegend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 2px 2px 0;
+}
+.filmlegend i {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+.filmclock {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  border-radius: 7px;
+  padding: 4px 10px;
+  font: 600 1rem ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
+.filmclock[hidden] { display: none; }
+.filmstrip .fsbar {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 1px 1px 0 0;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.filmstrip .fsbar.fired { background: rgba(237, 161, 0, 0.9); }
+.filmstrip .fsbar.big { background: var(--movement); }
+.filmstrip .fsmark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2.5px;
+  pointer-events: none;
+}
+.filmstrip .fsmark.wake { background: var(--teal); }
+.filmstrip .fsmark.onset { background: #1baf7a; }
+.filmstrip .fsband {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(237, 161, 0, 0.16);
+  pointer-events: none;
+}
+.nightrow { cursor: pointer; }
+.rowactions { display: flex; gap: 8px; justify-self: end; align-items: center; }
+.rowactions a { justify-self: auto; }
+button.trash {
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+button.trash:hover { color: var(--movement); border-color: var(--movement); }
+button.trash:active { transform: scale(0.94); }
+button.trash svg { width: 15px; height: 15px; }
+/* trends */
+.trendwrap { padding: 16px 18px; display: grid; gap: 16px; }
+.trendempty[hidden], .trendgrid[hidden], .heat[hidden] { display: none; }
+.trendempty { text-align: center; padding: 26px 12px; color: var(--muted); }
+.trendempty b { display: block; color: var(--ink-2); font-size: 1.1rem;
+  margin-bottom: 4px; }
+.trendgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 900px) { .trendgrid { grid-template-columns: 1fr; } }
+.trend { margin: 0; }
+.trend figcaption { color: var(--muted); font-size: 0.78rem; margin: 0 2px 8px; }
+.trend svg { display: block; width: 100%; height: auto; }
+.heatstrip { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px;
+  padding-bottom: 20px; }
+.heatstrip i {
+  aspect-ratio: 1 / 1.4; border-radius: 4px; font-style: normal;
+  background: var(--surface-2); position: relative;
+}
+.heatstrip i span {
+  position: absolute; inset: auto 0 -18px; text-align: center;
+  color: var(--muted); font-size: 0.6rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* theater player — expands inline, page stays visible */
+.theater {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.theater.open { grid-template-rows: 1fr; }
+.tinner { overflow: hidden; min-height: 0; display: grid; gap: 10px; }
+.tstage {
+  position: relative;
+  background: #000;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  margin-top: 4px;
+}
+.tstage video {
+  display: block; width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: min(62vh, 540px);
+  object-fit: contain; background: #000;
+}
+.tbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 4px 8px; flex-wrap: wrap;
+}
+.tbar b { font-size: 0.95rem; font-weight: 650; }
+.tmono { color: var(--muted); font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.tcount { margin-left: auto; }
+.pauto { display: flex; align-items: center; gap: 6px;
+  color: var(--ink-2); font-size: 0.8rem; cursor: pointer;
+  padding: 10px; min-height: 44px; }
+.pauto input { accent-color: var(--accent); width: 16px; height: 16px;
+  cursor: pointer; }
+.pnav {
+  appearance: none; cursor: pointer;
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--page) 72%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--ink); display: grid; place-items: center;
+  transition: background 0.2s ease, transform 0.15s ease, opacity 0.2s ease;
+}
+.pnav.prev { left: 12px; }
+.pnav.next { right: 12px; }
+.pnav:hover { background: var(--accent-soft); }
+.pnav:active { transform: translateY(-50%) scale(0.94); }
+.pnav:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pnav:disabled { opacity: 0.25; cursor: default; }
+.pnav svg { width: 20px; height: 20px; }
+.eventrow { padding: 4px 6px; border-radius: 10px;
+  transition: background 0.25s ease; }
+.eventrow.playing { background: var(--accent-soft); }
+.eventrow.playing .when { color: var(--accent); }
+.trate { display: flex; gap: 6px; }
+.rateb {
+  appearance: none; cursor: pointer;
+  width: 40px; height: 40px; border-radius: 10px;
+  border: 1px solid var(--border); background: none; color: var(--muted);
+  display: grid; place-items: center;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+}
+.rateb svg { width: 16px; height: 16px; }
+.rateb:hover { color: var(--ink-2); background: var(--surface-2); }
+.rateb:active { transform: scale(0.92); }
+.rateb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rateb[data-r="1"][aria-pressed="true"] { color: var(--quiet);
+  background: color-mix(in srgb, var(--quiet) 14%, transparent); }
+.rateb[data-r="-1"][aria-pressed="true"] { color: var(--movement);
+  background: var(--movement-soft); }
+.tdel.armed { color: var(--movement); border-color: var(--movement);
+  background: var(--movement-soft); }
+/* event-row play button + night actions */
+.playclip {
+  appearance: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 44px; padding: 8px 14px;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: none; color: var(--accent);
+  font: 600 0.82rem/1 system-ui, sans-serif;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.playclip:hover { background: var(--accent-soft); }
+.playclip:active { transform: scale(0.97); }
+.playclip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.playclip svg { width: 13px; height: 13px; }
+.nightactions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) {
+  .dot, .live.movement::after, .skel { animation: none; }
+  .pmodal { backdrop-filter: none; }
+  * { transition-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span id="statusdot" class="dot"></span>sleep-watch</h1>
+    <span class="tag" id="tagline">connecting to camera…</span>
+    <span class="tag" id="version" title="build version"></span>
+  </header>
+
+  <div class="grid">
+    <section class="panel live" id="livepanel" aria-label="Live camera view">
+      <img id="feed" src="/stream.mjpg" alt="Live camera feed of the bed">
+      <div class="chip" id="statechip" role="status" aria-live="polite">
+        <span class="dot" id="chipdot"></span><span id="statetext">CONNECTING</span>
+      </div>
+      <div class="scorebar" id="scorebar"><i id="scorefill"></i></div>
+    </section>
+
+    <div class="stack">
+      <section class="panel control" aria-label="Night controls">
+        <button class="night" id="nightbtn" disabled aria-live="polite">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path id="btnicon" d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>
+          </svg>
+          <span id="btntext">Start night</span>
+        </button>
+        <p class="hint" id="nighthint">Recording is off — live view only, nothing saved.</p>
+        <div class="padwrap">
+          <span class="padlabel">Clip padding</span>
+          <div class="seg" id="padseg" role="group"
+               aria-label="Seconds recorded before and after each movement">
+            <button type="button" data-pad="5">5s</button>
+            <button type="button" data-pad="10">10s</button>
+            <button type="button" data-pad="15">15s</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Live detection numbers">
+        <div class="nums">
+          <div id="scorenum"><b id="scoreval">—</b><span>motion score</span></div>
+          <div><b id="thrval">—</b><span>threshold</span></div>
+        </div>
+        <div class="spark">
+          <canvas id="spark" width="600" height="148" role="img"
+                  aria-label="Rolling motion score, last 90 seconds"></canvas>
+          <p>score · last 90s — <span style="color:var(--accent)">■</span> score,
+             <span style="color:var(--muted)">--</span> threshold</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel tonight" id="tonight" hidden aria-label="Tonight so far">
+    <div class="t"><b id="t-elapsed">—</b><span>recording</span></div>
+    <div class="t"><b id="t-phase">—</b><span>state</span></div>
+    <div class="t"><b id="t-onset">—</b><span>fell asleep</span></div>
+    <div class="t"><b id="t-moves">—</b><span>sleep movements</span></div>
+  </section>
+
+  <section class="nights">
+    <h2>Nights</h2>
+    <div class="nightrows" id="nightrows">
+      <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+    </div>
+  </section>
+
+  <section class="nights trends">
+    <h2>Trends</h2>
+    <div class="panel trendwrap" id="trendwrap">
+      <div class="trendempty" id="trendempty" hidden>
+        <b id="trendcount">—</b>
+        <span>Trends unlock at 2 recorded nights — keep sleeping on it.</span>
+      </div>
+      <div class="trendgrid" id="trendgrid" hidden>
+        <figure class="trend">
+          <figcaption>Time to fall asleep</figcaption>
+          <div class="chartbox" id="c-latency" role="img"
+               aria-label="Sleep latency per night"></div>
+        </figure>
+        <figure class="trend">
+          <figcaption>Movements per hour asleep</figcaption>
+          <div class="chartbox" id="c-perhour" role="img"
+               aria-label="Movements per hour per night"></div>
+        </figure>
+        <figure class="trend">
+          <figcaption>Restlessness — per-minute motion vs threshold</figcaption>
+          <div class="chartbox" id="c-restless" role="img"
+               aria-label="Restlessness score per night"></div>
+        </figure>
+      </div>
+      <figure class="trend heat" id="heatfig" hidden>
+        <figcaption>When the movement happens — all nights by hour</figcaption>
+        <div class="heatstrip" id="heatstrip" role="img"
+             aria-label="Movement count by hour of night"></div>
+      </figure>
+    </div>
+  </section>
+</div>
+
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const state = { monitoring: false, history: [], thr: null, alive: false };
+  const MAXPTS = 90;
+
+  const STATE_STYLES = {
+    MOVEMENT:    { dot: "movement",    tag: "movement detected" },
+    QUIET:       { dot: "",            tag: "watching — all quiet" },
+    SETTLING:    { dot: "calibrating", tag: "in bed — waiting for you to fall asleep" },
+    SLEEPING:    { dot: "",            tag: "asleep — recording sleep movements" },
+    CALIBRATING: { dot: "calibrating", tag: "calibrating to the room…" },
+    CONNECTING:  { dot: "offline",     tag: "connecting to camera…" },
+    OFFLINE:     { dot: "offline",     tag: "camera not responding" },
+  };
+
+  function fmt(x) {
+    return (x === null || x === undefined) ? "—" : Number(x).toFixed(4);
+  }
+
+  function applyStatus(s) {
+    const st = s.state in STATE_STYLES ? s.state : "CONNECTING";
+    const style = STATE_STYLES[st];
+    $("statetext").textContent = st;
+    $("chipdot").className = "dot " + style.dot;
+    $("statusdot").className = "dot " + style.dot;
+    $("tagline").textContent = s.monitoring
+      ? "NIGHT RECORDING — " + style.tag
+      : style.tag + (s.skeleton ? " · skeleton on" : "");
+    $("livepanel").classList.toggle("movement", st === "MOVEMENT");
+    $("scorebar").classList.toggle("movement", st === "MOVEMENT");
+    $("scorenum").classList.toggle("hot", st === "MOVEMENT");
+
+    $("scoreval").textContent = fmt(s.score);
+    $("thrval").textContent = fmt(s.threshold);
+    const frac = s.threshold ? Math.min(s.score / (s.threshold * 8), 1)
+                             : Math.min((s.score || 0) * 120, 1);
+    $("scorefill").style.width = (frac * 100).toFixed(1) + "%";
+
+    const btn = $("nightbtn");
+    btn.disabled = false;
+    state.monitoring = !!s.monitoring;
+    if (s.monitoring) {
+      btn.classList.add("stop");
+      $("btntext").textContent = "Stop night · save report";
+      $("btnicon").setAttribute("d", "M7 7h10v10H7z");
+      $("nighthint").textContent =
+        "Recording " + (s.night_date || "tonight") +
+        " — movements are being clipped and logged.";
+    } else {
+      btn.classList.remove("stop");
+      $("btntext").textContent = "Start night";
+      $("btnicon").setAttribute("d",
+        "M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z");
+      $("nighthint").textContent =
+        "Recording is off — live view only, nothing saved.";
+    }
+  }
+
+  /* sparkline */
+  const canvas = $("spark");
+  const ctx = canvas.getContext("2d");
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement)
+      .getPropertyValue(name).trim();
+  }
+  function drawSpark() {
+    const w = canvas.width, h = canvas.height, pad = 6;
+    ctx.clearRect(0, 0, w, h);
+    const pts = state.history;
+    if (!pts.length) return;
+    const peak = Math.max(0.02, ...pts.map(p => p.score),
+                          state.thr ? state.thr * 3 : 0);
+    const x = (i) => pad + (w - 2 * pad) * (i / (MAXPTS - 1));
+    const y = (v) => h - pad - (h - 2 * pad) * Math.min(v / peak, 1);
+    if (state.thr) {
+      ctx.strokeStyle = cssVar("--muted");
+      ctx.setLineDash([5, 5]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pad, y(state.thr));
+      ctx.lineTo(w - pad, y(state.thr));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const accent = cssVar("--accent");
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const px = x(i + (MAXPTS - pts.length)), py = y(p.score);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    ctx.lineTo(x(MAXPTS - 1), h - pad);
+    ctx.lineTo(x(MAXPTS - pts.length), h - pad);
+    ctx.closePath();
+    ctx.fillStyle = accent + "22";
+    ctx.fill();
+  }
+
+  /* polling */
+  let pollCount = 0;
+  async function poll() {
+    pollCount += 1;
+    try {
+      const r = await fetch("/api/status");
+      const s = await r.json();
+      if (s.camera_age_s === null || s.camera_age_s > 3) {
+        s.state = "OFFLINE";
+      }
+      state.alive = true;
+      state.thr = s.threshold;
+      state.last = s;
+      if (s.version) {
+        document.getElementById("version").textContent = "v" + s.version;
+      }
+      state.history.push({ score: s.score || 0 });
+      if (state.history.length > MAXPTS) state.history.shift();
+      applyStatus(s);
+      drawSpark();
+      updateTonight();
+      // while recording, refresh the nights list every ~15s
+      if (s.monitoring && pollCount % 38 === 0) loadNights();
+    } catch {
+      state.alive = false;
+      applyStatus({ state: "CONNECTING", score: null, threshold: null,
+                    monitoring: state.monitoring });
+    }
+  }
+
+  /* nights */
+  function hours(n) { return n.toFixed(1) + "h"; }
+  function still(s) {
+    const m = Math.round(s / 60);
+    return m >= 60 ? Math.floor(m / 60) + "h " + (m % 60) + "m" : m + "m";
+  }
+  function clock(ts) {
+    return new Date(ts * 1000).toLocaleTimeString([],
+      { hour: "2-digit", minute: "2-digit" });
+  }
+  function dur(s) {
+    if (s < 1) return s.toFixed(1) + "s";
+    s = Math.round(s);
+    if (s < 90) return s + "s";
+    const m = Math.floor(s / 60);
+    return m >= 60 ? Math.floor(m / 60) + "h " + (m % 60) + "m"
+                   : m + "m " + (s % 60) + "s";
+  }
+  let openNight = null;
+
+  function updateTonight() {
+    const card = $("tonight");
+    const s = state.last;
+    if (!s || !s.monitoring || !openNight) { card.hidden = true; return; }
+    card.hidden = false;
+    $("t-elapsed").textContent = dur(Date.now() / 1000 - openNight.start_ts);
+    $("t-phase").textContent = s.state;
+    $("t-onset").textContent = openNight.sleep_onset_ts
+      ? clock(openNight.sleep_onset_ts) +
+        " · " + dur(openNight.sleep_onset_ts - openNight.start_ts)
+      : "settling…";
+    $("t-moves").textContent = openNight.movements;
+  }
+
+  const TRASH_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
+    '<path d="M3 6h18M8 6V4h8v2m1 0-1 14H8L7 6"/></svg>';
+
+  /* theater player — expands inline above the clip rows, page stays visible */
+  const PLAY_SVG =
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+    '<path d="M8 5.5v13l11-6.5z"/></svg>';
+  const DL_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>';
+  const PREV_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+  const NEXT_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+  const X_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
+    '<path d="M18 6 6 18M6 6l12 12"/></svg>';
+  const UP_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true"><path d="M7 10v12M15 5.9 14 10h5.8a2 2 0 0 1 ' +
+    '1.9 2.6l-2.3 8a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 ' +
+    '2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9Z"/></svg>';
+  const DOWN_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true"><path d="M17 14V2M9 18.1 10 14H4.2a2 2 0 0 ' +
+    '1-1.9-2.6l2.3-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 ' +
+    '1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9Z"/></svg>';
+
+  async function rateEvent(eventId, rating) {
+    try {
+      await fetch(`/api/events/${eventId}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating }),
+      });
+    } catch {}
+  }
+  let activeTheater = null;
+
+  function buildTheater(box, clips, onDeleted) {
+    const t = document.createElement("div");
+    t.className = "theater";
+    t.innerHTML = `
+      <div class="tinner">
+        <div class="tstage">
+          <video controls playsinline preload="auto"></video>
+          <div class="filmclock" hidden aria-live="off">—</div>
+          <button type="button" class="pnav prev"
+                  aria-label="Previous clip">${PREV_SVG}</button>
+          <button type="button" class="pnav next"
+                  aria-label="Next clip">${NEXT_SVG}</button>
+        </div>
+        <div class="filmwrap" hidden>
+          <div class="filmstrip" title="click to jump the film"></div>
+          <div class="filmaxis"></div>
+          <div class="filmlegend">
+            <span><i style="background:color-mix(in srgb,var(--accent) 45%,transparent)"></i>quiet</span>
+            <span><i style="background:rgba(237,161,0,.9)"></i>movement</span>
+            <span><i style="background:var(--movement)"></i>big</span>
+            <span style="margin-left:auto">bar height = motion intensity (log)</span>
+          </div>
+        </div>
+        <div class="tbar">
+          <b class="ttitle">—</b>
+          <span class="tsub tmono">—</span>
+          <div class="trate">
+            <button type="button" class="rateb" data-r="1"
+                    aria-label="Good clip">${UP_SVG}</button>
+            <button type="button" class="rateb" data-r="-1"
+                    aria-label="Junk clip">${DOWN_SVG}</button>
+          </div>
+          <span class="tcount tmono">—</span>
+          <label class="pauto"><input type="checkbox" class="tauto">
+            play all</label>
+          <button type="button" class="playclip tdel">${TRASH_SVG} delete</button>
+          <button type="button" class="playclip tclose">${X_SVG} close</button>
+        </div>
+      </div>`;
+    const video = t.querySelector("video");
+    const api = {
+      el: t, clips, list: clips, i: 0,
+      highlight(i) {
+        box.querySelectorAll(".eventrow.playing")
+           .forEach((r) => r.classList.remove("playing"));
+        if (api.list !== clips) return;         // film mode: no row to mark
+        const row = box.querySelector(`[data-cliprow="${i}"]`);
+        if (row) row.classList.add("playing");
+      },
+      show(i) {
+        api.i = Math.max(0, Math.min(i, api.list.length - 1));
+        const c = api.list[api.i];
+        video.src = c.clip_url;
+        video.play().catch(() => {});
+        t.querySelector(".ttitle").textContent = clock(c.start_ts);
+        const parts = [c.kind];
+        if (c.clip_duration_s) parts.push(`${dur(c.clip_duration_s)} video`);
+        if (c.duration_s) parts.push(`${dur(c.duration_s)} move`);
+        t.querySelector(".tsub").textContent = parts.join(" · ");
+        t.querySelector(".tcount").textContent =
+          `${api.i + 1} / ${api.list.length} · ← →`;
+        t.querySelector(".pnav.prev").disabled = api.i === 0;
+        t.querySelector(".pnav.next").disabled =
+          api.i === api.list.length - 1;
+        t.querySelectorAll(".rateb").forEach((b) => {
+          b.style.display = c.id ? "" : "none";
+          b.setAttribute("aria-pressed",
+                         String(Number(b.dataset.r) === (c.rating || 0)));
+        });
+        const delBtn = t.querySelector(".tdel");
+        delBtn.style.display = c.id ? "" : "none";
+        delBtn.classList.remove("armed");
+        delBtn.innerHTML = `${TRASH_SVG} delete`;
+        api.highlight(api.i);
+      },
+      open(i, auto) {
+        api.list = clips;
+        t.querySelector(".filmwrap").hidden = true;
+        t.querySelector(".filmclock").hidden = true;
+        api.reveal(i, auto);
+      },
+      async openFilm(film, night) {
+        api.list = [film];
+        api.reveal(0, false);
+        if (night) await api.buildStrip(night);
+      },
+      async buildStrip(night) {
+        const strip = t.querySelector(".filmstrip");
+        const wrap = t.querySelector(".filmwrap");
+        strip.innerHTML = "";
+        wrap.hidden = true;
+        let minutes = [], events = [];
+        try {
+          const [rs, re] = await Promise.all([
+            fetch(`/api/nights/${night.id}/signal`),
+            fetch(`/api/nights/${night.id}/events`)]);
+          minutes = (await rs.json()).minutes || [];
+          events = (await re.json()).events || [];
+        } catch { return; }
+        if (!minutes.length) return;
+        const t0 = night.start_ts;
+        const t1 = night.end_ts || minutes[minutes.length - 1].minute_ts + 60;
+        const span = Math.max(t1 - t0, 1);
+        for (const ev of events) {
+          if (ev.kind !== "restless") continue;
+          const band = document.createElement("div");
+          band.className = "fsband";
+          band.style.left =
+            `${(100 * (ev.start_ts - t0) / span).toFixed(2)}%`;
+          band.style.width =
+            `${Math.max(100 * ((ev.end_ts || ev.start_ts) - ev.start_ts)
+                        / span, 0.3).toFixed(2)}%`;
+          strip.appendChild(band);
+        }
+        // one bar per minute would demand ~2px each and overflow a phone;
+        // bucket into a fixed column count, each keeping its peak minute
+        const COLS = 180;
+        const buckets = new Array(COLS).fill(0);
+        for (const m of minutes) {
+          const col = Math.min(COLS - 1, Math.max(0, Math.floor(
+            COLS * (m.minute_ts - t0) / span)));
+          buckets[col] = Math.max(
+            buckets[col], m.max_motion / (m.threshold || 1e-9));
+        }
+        // motion runs 0 → 50×+ threshold, so clamping at 1× (as this did)
+        // flattened every active minute into one identical full-height bar.
+        // Log scale against the night's own peak restores the shape.
+        const peak = Math.max(...buckets, 1);
+        const big = peak >= 10 ? Math.max(5, peak / 4) : Infinity;
+        const denom = Math.log(1 + peak);
+        for (const ratio of buckets) {
+          const bar = document.createElement("div");
+          bar.className = "fsbar" + (ratio >= big ? " big"
+                                     : ratio >= 1 ? " fired" : "");
+          const h = ratio > 0 ? Math.log(1 + ratio) / denom : 0;
+          bar.style.height = `${Math.round(100 * Math.max(0.05, h))}%`;
+          bar.title = `${ratio.toFixed(1)}× threshold`;
+          strip.appendChild(bar);
+        }
+        // hour labels — otherwise the strip is a shape with no scale
+        const axis = t.querySelector(".filmaxis");
+        axis.innerHTML = "";
+        const firstHour = Math.ceil(t0 / 3600) * 3600;
+        for (let h = firstHour; h < t1; h += 3600) {
+          const pct = 100 * (h - t0) / span;
+          if (pct < 2 || pct > 98) continue;
+          const lab = document.createElement("span");
+          lab.style.left = `${pct.toFixed(2)}%`;
+          lab.textContent = new Date(h * 1000).toLocaleTimeString(
+            [], { hour: "2-digit", minute: "2-digit" });
+          axis.appendChild(lab);
+        }
+        for (const ev of events) {
+          if (ev.kind !== "wake" && ev.kind !== "onset") continue;
+          const mark = document.createElement("div");
+          mark.className = `fsmark ${ev.kind}`;
+          mark.style.left =
+            `${(100 * (ev.start_ts - t0) / span).toFixed(2)}%`;
+          strip.appendChild(mark);
+        }
+        strip.onclick = (e) => {
+          const r = strip.getBoundingClientRect();
+          const frac = Math.min(Math.max(
+            (e.clientX - r.left) / r.width, 0), 1);
+          if (video.duration) {
+            video.currentTime = frac * video.duration;
+            video.play().catch(() => {});
+          }
+        };
+        const setRatio = () => {
+          if (!video.duration || api.list.length !== 1) return;
+          const realMin = span / video.duration / 60;
+          t.querySelector(".tsub").textContent =
+            `morning film · 1 s ≈ ${realMin.toFixed(realMin < 3 ? 1 : 0)}` +
+            ` min real time`;
+        };
+        // metadata may already be in while the strip fetches were running
+        if (video.readyState >= 1) setRatio();
+        else video.addEventListener("loadedmetadata", setRatio,
+                                    { once: true });
+
+        // Real time from playback position. Films recorded before v2.7 have
+        // no clock burned in, and this reads it off the timeline instead —
+        // so every old film gets the clock too.
+        const clockEl = t.querySelector(".filmclock");
+        const marker = document.createElement("div");
+        marker.className = "fsmark now";
+        marker.style.background = "#fff";
+        marker.style.width = "2px";
+        marker.hidden = true;
+        strip.appendChild(marker);
+        const tick = () => {
+          if (!video.duration || api.list.length !== 1) return;
+          const frac = Math.min(Math.max(
+            video.currentTime / video.duration, 0), 1);
+          const realTs = t0 + frac * span;
+          clockEl.textContent = new Date(realTs * 1000)
+            .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          clockEl.hidden = false;
+          marker.hidden = false;
+          marker.style.left = `${(100 * frac).toFixed(2)}%`;
+        };
+        video.removeEventListener("timeupdate", api._tick || (() => {}));
+        api._tick = tick;
+        video.addEventListener("timeupdate", tick);
+        video.addEventListener("seeked", tick);
+        tick();
+        wrap.hidden = false;
+      },
+      reveal(i, auto) {
+        if (auto !== undefined) t.querySelector(".tauto").checked = auto;
+        if (activeTheater && activeTheater !== api) activeTheater.close();
+        activeTheater = api;
+        t.classList.add("open");
+        api.show(i);
+        setTimeout(() => t.scrollIntoView(
+          { behavior: "smooth", block: "nearest" }), 380);
+      },
+      close() {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        t.classList.remove("open");
+        t.querySelector(".filmwrap").hidden = true;
+        t.querySelector(".filmclock").hidden = true;
+        api.highlight(-1);
+        if (activeTheater === api) activeTheater = null;
+      },
+    };
+    t.querySelector(".pnav.prev")
+      .addEventListener("click", () => api.show(api.i - 1));
+    t.querySelector(".pnav.next")
+      .addEventListener("click", () => api.show(api.i + 1));
+    t.querySelector(".tclose").addEventListener("click", api.close);
+    const delBtn = t.querySelector(".tdel");
+    delBtn.addEventListener("click", async () => {
+      const c = api.list[api.i];
+      if (!c.id) return;
+      if (!delBtn.classList.contains("armed")) {   // two-step confirm
+        delBtn.classList.add("armed");
+        delBtn.innerHTML = `${TRASH_SVG} delete?`;
+        return;
+      }
+      delBtn.disabled = true;
+      try {
+        const r = await fetch(`/api/events/${c.id}`, { method: "DELETE" });
+        if ((await r.json()).ok) {
+          api.close();
+          if (onDeleted) await onDeleted();
+          return;
+        }
+      } catch {}
+      delBtn.disabled = false;
+      delBtn.classList.remove("armed");
+      delBtn.innerHTML = `${TRASH_SVG} delete`;
+    });
+    t.querySelectorAll(".rateb").forEach((b) =>
+      b.addEventListener("click", () => {
+        const c = api.list[api.i];
+        if (!c.id) return;
+        const r = Number(b.dataset.r);
+        const next = (c.rating || 0) === r ? 0 : r;
+        c.rating = next || null;
+        rateEvent(c.id, next);
+        api.show(api.i);
+      }));
+    video.addEventListener("ended", () => {
+      if (t.querySelector(".tauto").checked
+          && api.i < api.list.length - 1) {
+        api.show(api.i + 1);
+      }
+    });
+    return api;
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (!activeTheater) return;
+    if (e.key === "Escape") activeTheater.close();
+    else if (e.key === "ArrowRight") activeTheater.show(activeTheater.i + 1);
+    else if (e.key === "ArrowLeft") activeTheater.show(activeTheater.i - 1);
+  });
+
+  async function toggleEvents(night, rowEl) {
+    const nightId = night.id;
+    const existing = document.getElementById("events-" + nightId);
+    if (existing) {
+      if (activeTheater && existing.contains(activeTheater.el)) {
+        activeTheater.close();
+      }
+      existing.remove();
+      return;
+    }
+    const r = await fetch(`/api/nights/${nightId}/events`);
+    const { events } = await r.json();
+    const box = document.createElement("div");
+    box.className = "eventbox";
+    box.id = "events-" + nightId;
+    const interesting = events.filter(
+      (e) => e.kind === "movement" || e.kind === "settling"
+             || e.kind === "truncated" || e.kind === "speech"
+             || e.kind === "wake" || e.kind === "ambient"
+             || e.kind === "awake" || e.kind === "restless");
+    const clips = interesting.filter((e) => e.clip_url);
+    const filmBtn = night.has_timelapse
+      ? `<button type="button" class="playclip" data-act="film">
+           ${PLAY_SVG} Morning film</button>` : "";
+    const actions = (clips.length || filmBtn)
+      ? `<div class="nightactions">
+           ${clips.length ? `<button type="button" class="playclip"
+             data-act="playnight">${PLAY_SVG} Play night</button>` : ""}
+           ${filmBtn}
+           ${clips.length ? `<button type="button" class="playclip"
+             data-act="export">${DL_SVG} Export film</button>` : ""}
+         </div>` : "";
+    box.innerHTML = actions + (interesting.length
+      ? interesting.map((e) => `
+        <div class="eventrow"${e.clip_url
+            ? ` data-cliprow="${clips.indexOf(e)}"` : ""}>
+          <span class="when">${clock(e.start_ts)}</span>
+          <span class="kindchip ${e.kind}">${e.kind}</span>
+          ${e.magnitude && e.kind !== "restless"
+            ? `<span class="magchip ${e.magnitude}">${
+                e.magnitude === "full" ? "full-body" : e.magnitude}</span>`
+            : ""}
+          <span class="meta">${e.clip_duration_s
+              ? `${dur(e.clip_duration_s)} video · ` : ""}${
+            dur(e.duration_s || 0)} move · peak
+            ${(e.peak_score || 0).toFixed(3)}</span>
+          ${e.clip_url
+            ? `<button type="button" class="playclip"
+                 data-clip="${clips.indexOf(e)}">${PLAY_SVG} watch</button>`
+            : ""}
+        </div>`).join("")
+      : '<div class="eventrow"><span class="meta">no movements — perfectly still night</span></div>');
+    const theater = (clips.length || filmBtn)
+      ? buildTheater(box, clips, async () => {
+          await toggleEvents(night, rowEl);       // collapse…
+          await toggleEvents(night, rowEl);       // …reopen with fresh rows
+        }) : null;
+    if (theater) box.prepend(theater.el);
+    box.querySelectorAll("button.playclip").forEach((b) =>
+      b.addEventListener("click", async () => {
+        if (b.classList.contains("tclose")) return;   // theater wires its own
+        if (b.dataset.act === "playnight") {
+          theater.open(0, true);
+        } else if (b.dataset.act === "film") {
+          theater.openFilm({
+            clip_url: `/timelapse/${night.date}.mp4`,
+            start_ts: night.start_ts, kind: "morning film",
+            duration_s: null, clip_duration_s: null,
+            rating: null, id: null,
+          }, night);
+        } else if (b.dataset.act === "export") {
+          b.disabled = true;
+          const original = b.innerHTML;
+          b.innerHTML = `${DL_SVG} Exporting…`;
+          try {
+            const r = await fetch(`/api/nights/${nightId}/export`,
+                                  { method: "POST" });
+            const body = await r.json();
+            if (body.ok) {
+              window.open(body.url, "_blank");
+              b.innerHTML = original;
+            } else {
+              b.innerHTML =
+                `${DL_SVG} ${body.error || "export failed"} — retry`;
+            }
+          } catch {
+            b.innerHTML = `${DL_SVG} export failed — retry`;
+          } finally { b.disabled = false; }
+        } else if (b.dataset.clip !== undefined) {
+          theater.open(Number(b.dataset.clip));
+        }
+      }));
+    rowEl.after(box);
+  }
+
+  async function deleteNight(n) {
+    const sure = confirm(
+      `Delete the night of ${n.date}?\n` +
+      `${n.movements} movement(s), its clips and its report will be ` +
+      "removed permanently.");
+    if (!sure) return;
+    await fetch(`/api/nights/${n.id}`, { method: "DELETE" });
+    loadNights();
+  }
+
+  async function loadNights() {
+    // an open night box (possibly a playing theater) must survive refreshes
+    if (document.querySelector(".eventbox")) return;
+    const box = $("nightrows");
+    try {
+      const r = await fetch("/api/nights");
+      const { nights } = await r.json();
+      openNight = nights.find((n) => n.open) || null;
+      updateTonight();
+      if (!nights.length) {
+        box.innerHTML =
+          '<div class="empty">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+          'stroke-width="1.5" stroke-linecap="round" aria-hidden="true">' +
+          '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>' +
+          "<b>No nights recorded yet</b>" +
+          "Press “Start night” before sleep — your first report lands here." +
+          "</div>";
+        return;
+      }
+      box.innerHTML = "";
+      nights.forEach((n) => {
+        const row = document.createElement("div");
+        row.className = "nightrow";
+        row.innerHTML = `
+          <div class="d">${n.date}${n.open
+            ? ' <span class="open-badge">● recording</span>' : ""}</div>
+          <div class="m">${hours(n.hours)}<em>monitored</em></div>
+          <div class="m" style="color:${n.per_hour > 4
+            ? "var(--movement)" : n.per_hour > 2
+            ? "var(--calib)" : "var(--quiet)"}">${n.movements}<em>movements</em></div>
+          <div class="m">${n.per_hour.toFixed(1)}<em>per hour</em></div>
+          <div class="m">${still(n.longest_still_s)}<em>longest still</em></div>
+          <div class="rowactions">
+            ${n.open ? "" : `<a href="/report/${n.date}" target="_blank"
+                rel="noopener">report</a>
+              <button class="trash" aria-label="Delete night ${n.date}"
+                title="Delete this night">${TRASH_SVG}</button>`}
+          </div>`;
+        row.addEventListener("click", (ev) => {
+          if (ev.target.closest("a, button")) return;
+          toggleEvents(n, row);
+        });
+        const trash = row.querySelector("button.trash");
+        if (trash) {
+          trash.addEventListener("click", () => deleteNight(n));
+        }
+        box.appendChild(row);
+      });
+    } catch {
+      box.innerHTML = '<div class="empty"><b>Could not load nights</b>' +
+                      "Server unreachable — is sleep-watch dashboard running?" +
+                      "</div>";
+    }
+  }
+
+  /* controls */
+  $("nightbtn").addEventListener("click", async () => {
+    const btn = $("nightbtn");
+    btn.disabled = true;
+    const url = state.monitoring ? "/api/stop" : "/api/start";
+    try { await fetch(url, { method: "POST" }); } catch {}
+    await poll();
+    await loadNights();
+    loadTrends();
+    btn.disabled = false;
+  });
+
+  $("feed").addEventListener("error", () => {
+    setTimeout(() => { $("feed").src = "/stream.mjpg?" + Date.now(); }, 2000);
+  });
+
+  /* trends — static per load, so SVG marks with native <title> tooltips */
+  function seriesSVG(values, labels, varName, kind, fmt) {
+    const w = 560, h = 180, padX = 30, padT = 16, padB = 30;
+    const nums = values.filter((v) => v !== null);
+    if (!nums.length) return "";
+    const peak = Math.max(...nums, 1e-9);
+    const n = values.length;
+    const x = (i) => padX + (w - 2 * padX) * (n === 1 ? 0.5 : i / (n - 1));
+    const y = (v) => h - padB - (h - padT - padB) * (v / peak);
+    const col = `var(${varName})`;
+    const peakIdx = values.indexOf(Math.max(...nums));
+    let marks = "";
+    if (kind === "bars") {
+      const bw = Math.min(34, Math.max(8, (w - 2 * padX) / n * 0.55));
+      values.forEach((v, i) => {
+        if (v === null) return;
+        marks += `<rect x="${(x(i) - bw / 2).toFixed(1)}" ` +
+          `y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" ` +
+          `height="${Math.max(2, h - padB - y(v)).toFixed(1)}" rx="4" ` +
+          `fill="${col}"><title>${labels[i]} — ${fmt(v)}</title></rect>`;
+      });
+    } else {
+      const pts = [];
+      values.forEach((v, i) => {
+        if (v !== null) pts.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+      });
+      marks += `<polyline points="${pts.join(" ")}" fill="none" ` +
+        `stroke="${col}" stroke-width="2" stroke-linejoin="round" ` +
+        `stroke-linecap="round"/>`;
+      values.forEach((v, i) => {
+        if (v === null) return;
+        marks += `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" ` +
+          `r="4" fill="${col}"/>` +
+          `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="11" ` +
+          `fill="transparent"><title>${labels[i]} — ${fmt(v)}</title></circle>`;
+      });
+    }
+    // selective direct label: the peak only
+    if (peakIdx >= 0) {
+      marks += `<text x="${x(peakIdx).toFixed(1)}" ` +
+        `y="${(y(values[peakIdx]) - 8).toFixed(1)}" text-anchor="middle" ` +
+        `fill="var(--ink-2)" font-size="11" ` +
+        `font-family="ui-monospace,Menlo,monospace">` +
+        `${fmt(values[peakIdx])}</text>`;
+    }
+    let ticks = "";
+    const step = Math.max(1, Math.ceil(n / 8));
+    labels.forEach((d, i) => {
+      if (i % step) return;
+      ticks += `<text x="${x(i).toFixed(1)}" y="${h - 8}" ` +
+        `text-anchor="middle" fill="var(--muted)" font-size="11" ` +
+        `font-family="ui-monospace,Menlo,monospace">${d.slice(5)}</text>`;
+    });
+    return `<svg viewBox="0 0 ${w} ${h}" ` +
+      `xmlns="http://www.w3.org/2000/svg">` +
+      `<line x1="${padX}" y1="${h - padB}" x2="${w - padX}" ` +
+      `y2="${h - padB}" stroke="var(--grid)" stroke-width="1"/>` +
+      marks + ticks + `</svg>`;
+  }
+
+  async function loadTrends() {
+    try {
+      const { nights, hour_counts } =
+        await (await fetch("/api/trends")).json();
+      const empty = $("trendempty"), grid = $("trendgrid"),
+            heat = $("heatfig");
+      if (nights.length < 2) {
+        empty.hidden = false;
+        grid.hidden = true;
+        $("trendcount").textContent =
+          nights.length + (nights.length === 1 ? " night" : " nights") +
+          " recorded";
+      } else {
+        empty.hidden = true;
+        grid.hidden = false;
+        const labels = nights.map((n) => n.date);
+        $("c-latency").innerHTML = seriesSVG(
+          nights.map((n) => n.latency_s === null ? null : n.latency_s / 60),
+          labels, "--violet", "line", (v) => Math.round(v) + "m");
+        $("c-perhour").innerHTML = seriesSVG(
+          nights.map((n) => n.per_hour),
+          labels, "--teal", "bars", (v) => v.toFixed(1) + "/h");
+        $("c-restless").innerHTML = seriesSVG(
+          nights.map((n) => n.restlessness ?? null),
+          labels, "--calib", "line", (v) => Math.round(v) + "");
+      }
+      const total = hour_counts.reduce((a, b) => a + b, 0);
+      heat.hidden = total === 0;
+      if (total) {
+        const peak = Math.max(...hour_counts);
+        $("heatstrip").innerHTML = hour_counts.map((c, hr) => {
+          const pct = c ? Math.round((15 + 85 * (c / peak))) : 0;
+          return `<i style="background:${c
+            ? `color-mix(in srgb, var(--accent) ${pct}%, var(--surface-2))`
+            : "var(--surface-2)"}" title="${String(hr).padStart(2, "0")}:00 — ${c} movement(s)">` +
+            `<span>${hr % 6 === 0 ? String(hr).padStart(2, "0") : ""}</span></i>`;
+        }).join("");
+      }
+    } catch {}
+  }
+
+  /* clip padding */
+  async function loadPadding() {
+    try {
+      const { padding_s } = await (await fetch("/api/settings")).json();
+      document.querySelectorAll("#padseg button").forEach((b) =>
+        b.setAttribute("aria-pressed",
+                       String(Number(b.dataset.pad) === padding_s)));
+    } catch {}
+  }
+  document.querySelectorAll("#padseg button").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ padding_s: Number(b.dataset.pad) }),
+      });
+      loadPadding();
+    }));
+
+  poll();
+  loadNights();
+  loadPadding();
+  loadTrends();
+  setInterval(poll, 400);
+  setInterval(loadNights, 60000);
+})();
+</script>
+</body>
+</html>
